@@ -50,45 +50,47 @@ public:
 	NetService();
 	~NetService();
 
-	int Init(const char *addr, unsigned int port, std::set<std::string> &trustIpSet, EventPipe *net2worldPipe, EventPipe *world2netPipe);
-	int Service();
+	int Init(const char *addr, unsigned int port, int maxConn, std::set<std::string> &trustIpSet, EventPipe *net2worldPipe, EventPipe *world2netPipe);
+	int Dispatch();
+
 	// return >= 0 as mailboxId, < 0 as error
 	int64_t ConnectTo(const char *addr, unsigned int port);
-
-	Mailbox *GetMailboxByFd(int fd);
-	Mailbox *GetMailboxByMailboxId(int64_t mailboxId);
+	bool Listen(const char *addr, unsigned int port);
 
 	int HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int socklen);
-
 	int HandleSocketRead(struct bufferevent *bev);
-	int HandleSocketReadMessage(struct bufferevent *bev);
-	void AddRecvMsg(Pluto *u);
-
-	int HandleSocketConnectToSuccess(evutil_socket_t fd);
 	int HandleSocketClosed(evutil_socket_t fd);
 	int HandleSocketError(evutil_socket_t fd);
+	int HandleSocketConnectToSuccess(evutil_socket_t fd);
+	void HandleWorkEvent();
+	void HandleHttpConnClose(struct evhttp_connection *http_conn);
 
-	void HandleWorldEvent();
-	void HandleSendPluto();
-	void HandleTickEvent();
+	struct HttpRequestArg
+	{
+		NetService *ns;
+		int64_t session_id;
+	};
 
-	void SendEvent(EventNode *node);
+private:
 
+	Mailbox * NewMailbox(int fd, E_CONN_TYPE type);
+	Mailbox *GetMailboxByFd(int fd);
+	Mailbox *GetMailboxByMailboxId(int64_t mailboxId);
 	void CloseMailboxByFd(int fd);
 	void CloseMailbox(int64_t mailboxId);
 	void CloseMailbox(Mailbox *pmb);
 
-	void RemoveHttpConn(struct evhttp_connection *http_conn);
+	void SendEvent(EventNode *node);
+	int SocketReadMessage(struct bufferevent *bev);
+	void HandleWorldEvent();
+	void HandleSendPluto();
 	bool HttpRequest(const char *url, int64_t session_id, int request_type, const char *post_data, int post_data_len);
-
-private:
-	bool Listen(const char *addr, unsigned int port);
-	Mailbox * NewMailbox(int fd, E_CONN_TYPE type);
 	struct evhttp_connection * GetHttpConnection(struct event_base *main_event, struct evdns_base *dns, const char *host, int port);
 
+	int m_maxConn;
 	struct event_base *m_mainEvent;
-	struct event *m_logicTimerEvent;
-	struct event *m_worldTimerEvent;
+	struct event *m_workTimerEvent;
+	struct event *m_tickTimerEvent;
 	struct event *m_stdinEvent;
 	struct evconnlistener *m_evconnlistener;
 
@@ -102,11 +104,5 @@ private:
 	EventPipe *m_world2netPipe;
 
 	std::map<std::string, struct evhttp_connection *> m_httpConnMap; // "host:port" : conn
-};
-
-struct HttpRequestArg
-{
-	NetService *ns;
-	int64_t session_id;
 };
 

@@ -35,17 +35,24 @@ extern "C"
 #include "pluto.h"
 #include "mailbox.h"
 
+enum READ_MSG_RESULT
+{
+	READ_MSG_ERROR 		= -1
+,	READ_MSG_WAIT 		= 0 
+,	READ_MSG_FINISH 	= 1 
+};
+
 static void listen_cb(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *sa, int socklen, void *user_data);
 static void read_cb(struct bufferevent *bev, void *user_data);
 static void event_cb(struct bufferevent *bev, short event, void *user_data);
-static void logic_timer_cb(evutil_socket_t fd, short event, void *user_data);
-static void world_timer_cb(evutil_socket_t fd, short event, void *user_data);
+static void work_timer_cb(evutil_socket_t fd, short event, void *user_data);
+static void tick_timer_cb(evutil_socket_t fd, short event, void *user_data);
 static void stdin_cb(evutil_socket_t fd, short event, void *user_data);
 static void http_conn_close_cb(struct evhttp_connection *http_conn, void *user_data);
 static void http_done_cb(struct evhttp_request *http_request, void *user_data);
 
 
-NetService::NetService() : m_mainEvent(nullptr), m_logicTimerEvent(nullptr), m_worldTimerEvent(nullptr), m_stdinEvent(nullptr), m_evconnlistener(nullptr)
+NetService::NetService() : m_maxConn(0), m_mainEvent(nullptr), m_workTimerEvent(nullptr), m_tickTimerEvent(nullptr), m_stdinEvent(nullptr), m_evconnlistener(nullptr)
 {
 }
 
@@ -54,8 +61,9 @@ NetService::~NetService()
 }
 
 
-int NetService::Init(const char *addr, unsigned int port, std::set<std::string> &trustIpSet, EventPipe *net2worldPipe, EventPipe *world2netPipe)
+int NetService::Init(const char *addr, unsigned int port, int maxConn, std::set<std::string> &trustIpSet, EventPipe *net2worldPipe, EventPipe *world2netPipe)
 {
+	m_maxConn = maxConn;
 	m_trustIpSet = trustIpSet;
 
 	// new event_base
@@ -73,25 +81,25 @@ int NetService::Init(const char *addr, unsigned int port, std::set<std::string> 
 		return -1;
 	}
 
-	// init logic timer, for net_server handle logic
-	m_logicTimerEvent = event_new(m_mainEvent, -1, EV_PERSIST, logic_timer_cb, this);
+	// init work timer, for net_server handle logic
+	m_workTimerEvent = event_new(m_mainEvent, -1, EV_PERSIST, work_timer_cb, this);
 	struct timeval tv;
 	tv.tv_sec = 0;
 	// tv.tv_sec = 3;
 	tv.tv_usec = 50 * 1000;
-	if (event_add(m_logicTimerEvent, &tv) != 0)
+	if (event_add(m_workTimerEvent, &tv) != 0)
 	{
-		LOG_ERROR("add tick timer fail");
+		LOG_ERROR("add work timer fail");
 		return -1;
 	}
 
-	// init world timer, for world timer
-	m_worldTimerEvent = event_new(m_mainEvent, -1, EV_PERSIST, world_timer_cb, this);
+	// init tick timer, for world timer
+	m_tickTimerEvent = event_new(m_mainEvent, -1, EV_PERSIST, tick_timer_cb, this);
 	tv.tv_sec = 0;
 	tv.tv_usec = 100 * 1000;
-	if (event_add(m_worldTimerEvent, &tv) != 0)
+	if (event_add(m_tickTimerEvent, &tv) != 0)
 	{
-		LOG_ERROR("add normal timer fail");
+		LOG_ERROR("add tick timer fail");
 		return -1;
 	}
 
@@ -120,23 +128,23 @@ int NetService::Init(const char *addr, unsigned int port, std::set<std::string> 
 	return 0;
 }
 
-int NetService::Service()
+int NetService::Dispatch()
 {
 
 	event_base_dispatch(m_mainEvent);
 
-	if (m_logicTimerEvent)
+	if (m_workTimerEvent)
 	{
-		event_del(m_logicTimerEvent);
-		event_free(m_logicTimerEvent);
-		m_logicTimerEvent = NULL;
+		event_del(m_workTimerEvent);
+		event_free(m_workTimerEvent);
+		m_workTimerEvent = NULL;
 	}
 
-	if (m_worldTimerEvent)
+	if (m_tickTimerEvent)
 	{
-		event_del(m_worldTimerEvent);
-		event_free(m_worldTimerEvent);
-		m_worldTimerEvent = NULL;
+		event_del(m_tickTimerEvent);
+		event_free(m_tickTimerEvent);
+		m_tickTimerEvent = NULL;
 	}
 
 	if (m_stdinEvent)
@@ -231,6 +239,40 @@ bool NetService::Listen(const char *addr, unsigned int port)
 	return true;
 }
 
+////////////////// mainbox function start [
+
+Mailbox * NetService::NewMailbox(int fd, E_CONN_TYPE connType)
+{
+	Mailbox *pmb = new Mailbox(connType);
+	if (!pmb)
+	{
+		return nullptr;
+	}
+
+	pmb->SetFd(fd);
+
+	auto iter = m_fds.lower_bound(fd);
+	if (iter != m_fds.end() && iter->first == fd)
+	{
+		// still has old mailbox
+		Mailbox *oldmb = iter->second;
+		if (oldmb != pmb)
+		{
+			delete oldmb;
+			iter->second = pmb;
+		}
+		LOG_WARN("has old mailbox fd=%d", fd);
+	}
+	else
+	{
+		// normal logic, insert new mailbox
+		m_fds.insert(iter, std::make_pair(fd, pmb));
+	}
+	m_mailboxs[pmb->GetMailboxId()] = pmb;
+
+	return pmb;
+}
+
 Mailbox *NetService::GetMailboxByFd(int fd)
 {
 	auto iter = m_fds.find(fd);
@@ -251,6 +293,54 @@ Mailbox *NetService::GetMailboxByMailboxId(int64_t mailboxId)
 	return iter->second;
 }
 
+void NetService::CloseMailboxByFd(int fd)
+{
+	Mailbox *pmb = GetMailboxByFd(fd);
+	if (pmb == nullptr)
+	{
+		LOG_WARN("mailbox null fd=%d", fd);
+		return;
+	}
+	CloseMailbox(pmb);
+}
+
+void NetService::CloseMailbox(int64_t mailboxId)
+{
+	Mailbox *pmb = GetMailboxByMailboxId(mailboxId);
+	if (pmb == nullptr)
+	{
+		LOG_WARN("mailbox null mailboxId=%ld", mailboxId);
+		return;
+	}
+	CloseMailbox(pmb);
+}
+
+void NetService::CloseMailbox(Mailbox *pmb)
+{
+	if (pmb->GetBEV() != nullptr)
+	{
+		bufferevent_free(pmb->GetBEV());
+		pmb->SetBEV(nullptr);
+	}
+	else
+	{
+		LOG_WARN("m_bev null %d", pmb->GetMailboxId());
+	}
+
+	// notice to world
+	EventNodeDisconnect *node = new EventNodeDisconnect();
+	node->mailboxId = pmb->GetMailboxId();
+	SendEvent(node);
+
+	// push to list, delete by tick
+	pmb->SetDeleteFlag();
+	m_mb4del.push_back(pmb);
+	m_fds.erase(pmb->GetFd());
+	m_mailboxs.erase(pmb->GetMailboxId());
+}
+
+////////////////////// mainbox function end ]
+
 int NetService::HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int socklen)
 {
 	LOG_DEBUG("fd=%d", fd);
@@ -268,7 +358,12 @@ int NetService::HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int
 	LOG_DEBUG("clientHost=%s clientPort=%d", clientHost, clientPort);
 
 	// check connection num
-	// TODO
+	if (m_mailboxs.size() > m_maxConn)
+	{
+        LOG_WARN("connection is max fd=%d", fd)
+		evutil_closesocket(fd);
+		return -1
+	}
 
 	// check connection is trust
 	E_CONN_TYPE connType = E_CONN_TYPE::CONN_TYPE_UNTRUST;
@@ -280,7 +375,7 @@ int NetService::HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int
 		connType = E_CONN_TYPE::CONN_TYPE_TRUST;
 	}
 	
-	// check connection is valide
+	// check connection is valid
 	// TODO
 
 	// set fd non-block
@@ -317,45 +412,6 @@ int NetService::HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int
 	return 0;
 }
 
-Mailbox * NetService::NewMailbox(int fd, E_CONN_TYPE connType)
-{
-	Mailbox *pmb = new Mailbox(connType);
-	if (!pmb)
-	{
-		return nullptr;
-	}
-
-	pmb->SetFd(fd);
-
-	auto iter = m_fds.lower_bound(fd);
-	if (iter != m_fds.end() && iter->first == fd)
-	{
-		// still has old mailbox
-		Mailbox *oldmb = iter->second;
-		if (oldmb != pmb)
-		{
-			delete oldmb;
-			iter->second = pmb;
-		}
-		LOG_WARN("has old mailbox fd=%d", fd);
-	}
-	else
-	{
-		// normal logic, insert new mailbox
-		m_fds.insert(iter, std::make_pair(fd, pmb));
-	}
-	m_mailboxs[pmb->GetMailboxId()] = pmb;
-
-	return pmb;
-}
-
-enum READ_MSG_RESULT
-{
-	READ_MSG_ERROR 		= -1
-,	READ_MSG_WAIT 		= 0 
-,	READ_MSG_FINISH 	= 1 
-};
-
 int NetService::HandleSocketRead(struct bufferevent *bev)
 {
 	// loop to handle read data
@@ -365,14 +421,14 @@ int NetService::HandleSocketRead(struct bufferevent *bev)
 	int ret = READ_MSG_WAIT;
 	do
 	{
-		ret = HandleSocketReadMessage(bev);
+		ret = SocketReadMessage(bev);
 	} 
 	while (ret == READ_MSG_FINISH);
 
 	return 0;
 }
 
-int NetService::HandleSocketReadMessage(struct bufferevent *bev)
+int NetService::SocketReadMessage(struct bufferevent *bev)
 {
 	evutil_socket_t fd = bufferevent_getfd(bev);
 
@@ -406,16 +462,16 @@ int NetService::HandleSocketReadMessage(struct bufferevent *bev)
 	{
 		// no pluto in mailbox
 
-		if (input_len < PLUTO_MSGLEN_HEAD)
+		if (input_len < MSGLEN_HEAD)
 		{
 			// data less then msg head
 			return READ_MSG_WAIT;
 		}
 
 		// get msg head len
-		char head[PLUTO_MSGLEN_HEAD];
-		nLen= evbuffer_copyout(input, head, PLUTO_MSGLEN_HEAD);
-		if (nLen < PLUTO_MSGLEN_HEAD)
+		char head[MSGLEN_HEAD];
+		nLen= evbuffer_copyout(input, head, MSGLEN_HEAD);
+		if (nLen < MSGLEN_HEAD)
 		{
 			return READ_MSG_WAIT;
 		}
@@ -427,8 +483,10 @@ int NetService::HandleSocketReadMessage(struct bufferevent *bev)
 		int msgLen = (int)ntohl(*(uint32_t *)head);
 		if (msgLen > MSGLEN_MAX)
 		{
+			// msg len over size, should kick this connection
 			LOG_WARN("msg too long fd=%d msgLen=%d", fd, msgLen);
-			// TODO should kick this connection?
+			CloseMailbox(pmb);
+			return READ_MSG_ERROR;
 		}
 
 		// new a pluto
@@ -437,11 +495,11 @@ int NetService::HandleSocketReadMessage(struct bufferevent *bev)
 
 		// copy msghead to buffer
 		buffer = pu->GetBuffer();
-		memcpy(buffer, head, PLUTO_MSGLEN_HEAD);
-		buffer += PLUTO_MSGLEN_HEAD;
+		memcpy(buffer, head, MSGLEN_HEAD);
+		buffer += MSGLEN_HEAD;
 
-		pu->SetRecvLen(PLUTO_MSGLEN_HEAD);
-		nWanted = msgLen - PLUTO_MSGLEN_HEAD;
+		pu->SetRecvLen(MSGLEN_HEAD);
+		nWanted = msgLen - MSGLEN_HEAD;
 	}
 
 	else
@@ -472,7 +530,11 @@ int NetService::HandleSocketReadMessage(struct bufferevent *bev)
 	// add into recv msg list
 	pu->SetRecvLen(pu->GetMsgLen());
 	pu->SetMailboxId(pmb->GetMailboxId());
-	AddRecvMsg(pu);
+
+	// send to world
+	EventNodeMsg *node = new EventNodeMsg();
+	node->pu = pu;
+	SendEvent(node);
 
 	// clean mailbox pluto
 	pmb->SetRecvPluto(nullptr);
@@ -480,14 +542,18 @@ int NetService::HandleSocketReadMessage(struct bufferevent *bev)
 	return READ_MSG_FINISH;
 }
 
-void NetService::AddRecvMsg(Pluto *pu)
+
+int NetService::HandleSocketClosed(evutil_socket_t fd)
 {
-	// send to world
-	EventNodeMsg *node = new EventNodeMsg();
-	node->pu = pu;
-	SendEvent(node);
+	CloseMailboxByFd(fd);
+	return 0;
 }
 
+int NetService::HandleSocketError(evutil_socket_t fd)
+{
+	CloseMailboxByFd(fd);
+	return 0;
+}
 
 int NetService::HandleSocketConnectToSuccess(evutil_socket_t fd)
 {
@@ -506,16 +572,9 @@ int NetService::HandleSocketConnectToSuccess(evutil_socket_t fd)
 	return 0;
 }
 
-int NetService::HandleSocketClosed(evutil_socket_t fd)
+void NetService::SendEvent(EventNode *node)
 {
-	CloseMailboxByFd(fd);
-	return 0;
-}
-
-int NetService::HandleSocketError(evutil_socket_t fd)
-{
-	CloseMailboxByFd(fd);
-	return 0;
+	m_net2worldPipe->Push(node);
 }
 
 void NetService::HandleWorldEvent()
@@ -623,7 +682,7 @@ void NetService::HandleSendPluto()
 	}
 }
 
-void NetService::HandleTickEvent()
+void NetService::HandleWorkEvent()
 {
 	// 1. handle world event
 	// 2. handle send pluto
@@ -639,58 +698,7 @@ void NetService::HandleTickEvent()
 	ClearContainer(m_mb4del);
 }
 
-void NetService::SendEvent(EventNode *node)
-{
-	m_net2worldPipe->Push(node);
-}
-
-void NetService::CloseMailboxByFd(int fd)
-{
-	Mailbox *pmb = GetMailboxByFd(fd);
-	if (pmb == nullptr)
-	{
-		LOG_WARN("mailbox null fd=%d", fd);
-		return;
-	}
-	CloseMailbox(pmb);
-}
-
-void NetService::CloseMailbox(int64_t mailboxId)
-{
-	Mailbox *pmb = GetMailboxByMailboxId(mailboxId);
-	if (pmb == nullptr)
-	{
-		LOG_WARN("mailbox null mailboxId=%ld", mailboxId);
-		return;
-	}
-	CloseMailbox(pmb);
-}
-
-void NetService::CloseMailbox(Mailbox *pmb)
-{
-	if (pmb->GetBEV() != nullptr)
-	{
-		bufferevent_free(pmb->GetBEV());
-		pmb->SetBEV(nullptr);
-	}
-	else
-	{
-		LOG_WARN("m_bev null %d", pmb->GetMailboxId());
-	}
-
-	// notice to world
-	EventNodeDisconnect *node = new EventNodeDisconnect();
-	node->mailboxId = pmb->GetMailboxId();
-	SendEvent(node);
-
-	// push to list, delete by tick
-	pmb->SetDeleteFlag();
-	m_mb4del.push_back(pmb);
-	m_fds.erase(pmb->GetFd());
-	m_mailboxs.erase(pmb->GetMailboxId());
-}
-
-void NetService::RemoveHttpConn(struct evhttp_connection *http_conn)
+void NetService::HandleHttpConnClose(struct evhttp_connection *http_conn)
 {
 	for (auto iter = m_httpConnMap.begin(); iter != m_httpConnMap.end(); ++iter)
 	{
@@ -749,7 +757,7 @@ bool NetService::HttpRequest(const char *url, int64_t session_id, int request_ty
 		}
 
 		// 4. new request
-		struct HttpRequestArg *arg = new HttpRequestArg;
+		struct NetService::HttpRequestArg *arg = new NetService::HttpRequestArg;
 		arg->ns = this;
 		arg->session_id = session_id;
 		struct evhttp_request *http_request = evhttp_request_new(http_done_cb, (void *)arg);
@@ -852,14 +860,14 @@ static void event_cb(struct bufferevent *bev, short event, void *user_data)
 	}
 }
 
-static void logic_timer_cb(evutil_socket_t fd, short event, void *user_data)
+static void work_timer_cb(evutil_socket_t fd, short event, void *user_data)
 {
 	NetService *ns = (NetService *)user_data;
-	ns->HandleTickEvent();
+	ns->HandleWorkEvent();
 }
 
 // for add timer
-static void world_timer_cb(evutil_socket_t fd, short event, void *user_data)
+static void tick_timer_cb(evutil_socket_t fd, short event, void *user_data)
 {
 	// do nothing in net, just send to world
 	NetService *ns = (NetService *)user_data;
@@ -979,12 +987,12 @@ static void http_conn_close_cb(struct evhttp_connection *http_conn, void *user_d
 	LOG_DEBUG("******* http_conn_close_callback *******");
 
 	NetService *ns = (NetService *)user_data;
-	ns->RemoveHttpConn(http_conn);
+	ns->HandleHttpConnClose(http_conn);
 }
 
 static void http_done_cb(struct evhttp_request *http_request, void *user_data)
 {
-	struct HttpRequestArg *arg = (struct HttpRequestArg *)user_data;
+	struct NetService::HttpRequestArg *arg = (struct NetService::HttpRequestArg *)user_data;
 	NetService *ns = arg->ns;
 	EventNodeHttpRsp *node = new EventNodeHttpRsp;
 	do
