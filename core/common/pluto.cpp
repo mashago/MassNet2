@@ -7,6 +7,7 @@
 #include <string.h>
 #include <string>
 
+#include "common.h"
 #include "pluto.h"
 #include "logger.h"
 

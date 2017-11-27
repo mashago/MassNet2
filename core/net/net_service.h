@@ -57,6 +57,7 @@ public:
 	int64_t ConnectTo(const char *addr, unsigned int port);
 	bool Listen(const char *addr, unsigned int port);
 
+	void SendEvent(EventNode *node);
 	int HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int socklen);
 	int HandleSocketRead(struct bufferevent *bev);
 	int HandleSocketClosed(evutil_socket_t fd);
@@ -73,14 +74,13 @@ public:
 
 private:
 
-	Mailbox * NewMailbox(int fd, E_CONN_TYPE type);
+	Mailbox *NewMailbox(int fd, E_CONN_TYPE type);
 	Mailbox *GetMailboxByFd(int fd);
 	Mailbox *GetMailboxByMailboxId(int64_t mailboxId);
-	void CloseMailboxByFd(int fd);
-	void CloseMailbox(int64_t mailboxId);
 	void CloseMailbox(Mailbox *pmb);
+	void CloseMailboxByFd(int fd);
+	void CloseMailboxByMailboxId(int64_t mailboxId);
 
-	void SendEvent(EventNode *node);
 	int SocketReadMessage(struct bufferevent *bev);
 	void HandleWorldEvent();
 	void HandleSendPluto();
@@ -96,8 +96,8 @@ private:
 
 	std::map<int, Mailbox *> m_fds;
 	std::map<int64_t, Mailbox *> m_mailboxs;
-	std::list<Mailbox *> m_mb4del;
-	std::set<int64_t> m_sendMailboxs;
+	std::list<Mailbox *> m_delMailboxs;
+	std::set<Mailbox *> m_sendMailboxs;
 
 	std::set<std::string> m_trustIpSet;
 	EventPipe *m_net2worldPipe;
