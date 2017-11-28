@@ -124,13 +124,9 @@ inline void gettimeofday(struct timeval *tp, void *ptr)
 // #define snprintf(buffer, count, format, ...) do {_snprintf(buffer, count-1, format, ##__VA_ARGS__); buffer[count-1] = '\0'; } while (false)
 #define snprintf(buffer, count, format, ...) do {_snprintf_s(buffer, count, count-1, format, ##__VA_ARGS__);} while (false)
 
-#endif
-
-inline void sleep_second(int second)
+inline void sleep(int second)
 {
-#ifdef WIN32
 	Sleep(second * 1000);
-#else
-	sleep(1);
-#endif
 }
+
+#endif
