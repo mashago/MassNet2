@@ -47,7 +47,6 @@ public:
 
 	void ResetCursor();
 
-
 	void WriteMsgId(int msgId);
 	void WriteExt(int ext);
 	bool WriteByte(char val);
