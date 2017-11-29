@@ -10,8 +10,8 @@ INCLUDE_DIRECTORIES(
 ./world
 ../tinyxml
 ../lfs
-#/usr/local/include/mysql
-#/usr/include/mysql
+/usr/local/include/mysql
+/usr/include/mysql
 )
 
 IF(CMAKE_SYSTEM_NAME MATCHES "Darwin")

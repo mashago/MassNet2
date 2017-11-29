@@ -109,14 +109,14 @@ int main(int argc, char ** argv)
 	int server_type = root->IntAttribute("type");
 	const char *ip = (char*)root->Attribute("ip");
 	int port = root->IntAttribute("port");
+	int max_conn = root->IntAttribute("maxConn");
 	const char *entry_file = (char*)root->Attribute("file");
 	int auto_shutdown = root->IntAttribute("auto_shutdown");
 	int no_broadcast = root->IntAttribute("no_broadcast");
-	int max_conn = root->IntAttribute("maxConn");
 
 
-	printf("server_id=%d server_type=%d ip=%s port=%d entry_file=%s auto_shutdown=%d no_broadcast=%d max_conn=%d\n"
-	, server_id, server_type, ip, port, entry_file, auto_shutdown, no_broadcast, max_conn);
+	printf("server_id=%d server_type=%d ip=%s port=%d max_conn=%d entry_file=%s auto_shutdown=%d no_broadcast=%d\n"
+	, server_id, server_type, ip, port, max_conn, entry_file, auto_shutdown, no_broadcast)
 
 	std::set<std::string> trustIpSet;
 	tinyxml2::XMLElement *trust_ip = root->FirstChildElement("trust_ip");
@@ -149,7 +149,7 @@ int main(int argc, char ** argv)
 		printf("******* %s auto shutdown *******\n", conf_file);
 		return 0;
 	}
-	world->Run();
+	world->Dispatch();
 
 	NetService *net = new NetService();
 	net->Init(ip, port, max_conn, trustIpSet, net2worldPipe, world2newPipe);
