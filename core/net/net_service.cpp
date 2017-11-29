@@ -381,8 +381,7 @@ int NetService::HandleNewConnection(evutil_socket_t fd, struct sockaddr *sa, int
 		connType = E_CONN_TYPE::CONN_TYPE_TRUST;
 	}
 	
-	// check connection is valid
-	// TODO
+	// TODO check connection is valid
 
 	// set fd non-block
 	evutil_make_socket_nonblocking(fd);

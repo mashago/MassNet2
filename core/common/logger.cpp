@@ -291,7 +291,7 @@ void Logger::RecvLog()
 	if (pfile)
 	{
 		fclose(pfile);
-		// TODO shift log file
+		// shift log file
 		ShiftLogFile();
 	}
 }

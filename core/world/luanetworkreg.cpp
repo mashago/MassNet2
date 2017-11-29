@@ -4,6 +4,7 @@ extern "C"
 #include <lauxlib.h>
 #include <lualib.h>
 }
+#include "common.h"
 #include "logger.h"
 #include "pluto.h"
 #include "luaworld.h"

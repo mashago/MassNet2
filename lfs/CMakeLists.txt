@@ -1,0 +1,34 @@
+
+#1.define target
+#2.include
+#3.group source
+#4.create lib
+
+#1.define target
+SET(TARGET_NAME lfs)
+
+#2.include
+INCLUDE_DIRECTORIES(
+./
+)
+
+IF(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+	#LINK_DIRECTORIES(/usr/local/mysql/lib)
+ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+ELSEIF(CMAKE_SYSTEM_NAME MATCHES "CYGWIN")
+ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Windows")
+	INCLUDE_DIRECTORIES(${PROJECT_PATH}/include/windows/lua)
+	#INCLUDE_DIRECTORIES(${PROJECT_PATH}/include/windows/libevent)
+	#INCLUDE_DIRECTORIES(${PROJECT_PATH}/include/windows/mysql)
+	#LINK_DIRECTORIES(${PROJECT_PATH}/lib/windows)
+ELSE()
+ENDIF()
+
+#3.group source
+FILE(GLOB FILES_HEAD *.h *.hpp)
+AUX_SOURCE_DIRECTORY(. FILES_SOURCE)
+SOURCE_GROUP("Include" FILES ${FILES_HEAD})
+SOURCE_GROUP("Source" FILES ${FILES_SOURCE})
+
+#4.create lib
+ADD_LIBRARY(${TARGET_NAME} ${FILES_HEAD} ${FILES_SOURCE})

@@ -8,7 +8,8 @@ INCLUDE_DIRECTORIES(
 ./common
 ./net
 ./world
-#../lfs
+../tinyxml
+../lfs
 #/usr/local/include/mysql
 #/usr/include/mysql
 )
