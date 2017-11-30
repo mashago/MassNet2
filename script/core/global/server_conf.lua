@@ -1,5 +1,27 @@
 
 ServerConfig = {}
+
+function ServerConfig:new(server_id, server_type)
+	local obj = 
+	{
+		_server_id = server_id,
+		_server_type = server_type,
+		_all_scene_list = {},
+		_single_scene_list = {},
+		_from_to_scene_list = {},
+		_area_list = {},
+		_no_broadcast = false,
+		_ip = "",
+		_port = 0,
+		_db_name_map = {}, -- {[db_type]=db_name}
+	}
+
+	setmetatable(obj, self)
+	self.__index = self
+
+	return obj
+end
+
 ServerConfig._server_id = 0
 ServerConfig._server_type = ServerType.NULL
 ServerConfig._all_scene_list = {}
