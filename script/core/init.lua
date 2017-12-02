@@ -1,7 +1,7 @@
+require "core.util.init"
 require "core.global.init"
 
 --[[
-require "global.util.util"
 require "global.log.logger"
 require "global.net.init"
 require "global.timer.timer"
