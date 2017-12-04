@@ -12,8 +12,8 @@ function g_funcs.load_address(xml_doc)
 	local port = root_ele:int_attribute("port")
 	Log.info("g_funcs.load_address ip=%s port=%d", ip, port)
 
-	ServerConfig._ip = ip
-	ServerConfig._port = port
+	g_server_conf._ip = ip
+	g_server_conf._port = port
 end
 
 function g_funcs.connect_to_servers(xml_doc)
@@ -70,10 +70,10 @@ function g_funcs.load_scene(xml_doc)
 		Log.debug("single=%d from=%d to=%d", single, from, to)
 
 		if single > 0 then
-			ServerConfig.add_single_scene(single)
+			g_server_conf:add_single_scene(single)
 		end
 		if to > from then
-			ServerConfig.add_from_to_scene(from, to)
+			g_server_conf:add_from_to_scene(from, to)
 		end
 
 		scene_ele = scene_ele:next_sibling_element()
@@ -101,7 +101,7 @@ function g_funcs.load_area(xml_doc)
 		Log.debug("id=%d", id)
 
 		if id > 0 then
-			ServerConfig.add_area(id)
+			g_server_conf:add_area(id)
 		end
 		area_ele = area_ele:next_sibling_element()
 	end
@@ -139,7 +139,7 @@ function g_funcs.connect_to_mysql(xml_doc)
 		-- core logic
 		local ret = DBMgr.connect_to_mysql(ip, port, username, password, real_db_name)
 		if ret then
-			ServerConfig._db_name_map[db_type] = real_db_name
+			g_server_conf._db_name_map[db_type] = real_db_name
 		else
 			Log.warn("g_funcs.connect_to_mysql fail ip=%s port=%d username=%s password=%s db_name=%s db_type=%d db_suffix=%s real_db_name=%s", ip, port, username, password, db_name, db_type, db_suffix, real_db_name)
 		end
@@ -162,8 +162,8 @@ function g_funcs.handle_register_server(data, mailbox_id, msg_id)
 	local msg = 
 	{
 		result = ErrorCode.SUCCESS,
-		server_id = ServerConfig._server_id,
-		server_type = ServerConfig._server_type,
+		server_id = g_server_conf._server_id,
+		server_type = g_server_conf._server_type,
 	}
 
 	-- add server
@@ -177,7 +177,7 @@ function g_funcs.handle_register_server(data, mailbox_id, msg_id)
 	new_server_info:send_msg(MID.REGISTER_SERVER_RET, msg)
 
 	-- broadcast
-	if ServerConfig._no_broadcast then
+	if g_server_conf._no_broadcast then
 		return
 	end
 
@@ -216,11 +216,11 @@ function g_funcs.handle_register_server_ret(data, mailbox_id, msg_id)
 	local server_type = data.server_type
 	ServiceClient.register_success(mailbox_id, server_id, server_type)
 
-	if server_type == ServerType.LOGIN and ServerConfig._server_type == ServerType.BRIDGE then
+	if server_type == ServerType.LOGIN and g_server_conf._server_type == ServerType.BRIDGE then
 		-- register area
 		local msg = 
 		{
-			area_list = ServerConfig._area_list,
+			area_list = g_server_conf._area_list,
 		}
 
 		Net.send_msg(mailbox_id, MID.REGISTER_AREA_REQ, msg)

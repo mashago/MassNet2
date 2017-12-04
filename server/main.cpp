@@ -116,7 +116,7 @@ int main(int argc, char ** argv)
 
 
 	printf("server_id=%d server_type=%d ip=%s port=%d max_conn=%d entry_file=%s auto_shutdown=%d no_broadcast=%d\n"
-	, server_id, server_type, ip, port, max_conn, entry_file, auto_shutdown, no_broadcast)
+	, server_id, server_type, ip, port, max_conn, entry_file, auto_shutdown, no_broadcast);
 
 	std::set<std::string> trustIpSet;
 	tinyxml2::XMLElement *trust_ip = root->FirstChildElement("trust_ip");

@@ -94,7 +94,7 @@ function ServiceServer.handle_disconnect(mailbox_id)
 	local disconnect_server_id = server_info._server_id
 	ServiceServer.remove_server(server_info)
 
-	if not ServerConfig._no_broadcast then
+	if not g_server_conf._no_broadcast then
 		for _, server_info in pairs(ServiceServer._all_server_map) do
 			local msg =
 			{

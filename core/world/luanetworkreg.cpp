@@ -488,7 +488,7 @@ int luanetwork_read_string(lua_State* L)
 	// LOG_DEBUG("out_val=%s", out_val);
 
 	lua_pushboolean(L, ret);
-	lua_pushstring(L, out_val);
+	lua_pushlstring(L, out_val, out_len);
 
 	return 2;
 }
@@ -736,7 +736,7 @@ int luanetwork_read_string_array(lua_State* L)
 		}
 
 		lua_pushinteger(L, i);
-		lua_pushstring(L, out_val);
+		lua_pushlstring(L, out_val, out_len);
 		lua_rawset(L, -3);
 	}
 

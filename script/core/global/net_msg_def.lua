@@ -332,6 +332,8 @@ MSG_DEF_MAP =
 		{ "result", _Int },
 		{ "server_id", _Int },
 		{ "server_type", _Int },
+		{ "single_scene_list", _IntArray },
+		{ "from_to_scene_list", _IntArray },
 	},
 
 	[MID.REGISTER_SERVER_BROADCAST] =
