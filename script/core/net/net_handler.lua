@@ -234,6 +234,65 @@ function write_data_by_msgdef(data, msgdef, deep)
 	
 end
 
+--------------------- c call ----------------------
+
+function ccall_new_connection(mailbox_id, conn_type)
+	mailbox_id = math.floor(mailbox_id)
+	Log.info("ccall_new_connection mailbox_id=%d conn_type=%d", mailbox_id, conn_type)
+
+	local function error_handler(msg, mailbox_id)
+		local msg = debug.traceback(msg, 3)
+		msg = string.format("ccall_new_connection error : mailbox_id = %d \n%s", mailbox_id, msg)
+		return msg 
+	end
+	
+	local status, msg = xpcall(Net.add_mailbox
+	, function(msg) return error_handler(msg, mailbox_id) end
+	, mailbox_id, conn_type)
+
+	if not status then
+		Log.err(msg)
+	end
+end
+
+function ccall_connect_to_ret_handler(connect_index, mailbox_id)
+	connect_index = math.floor(connect_index)
+	mailbox_id = math.floor(mailbox_id)
+	Log.info("ccall_connect_to_ret_handler connect_index=%d mailbox_id=%d", connect_index, mailbox_id)
+
+	local function error_handler(msg, connect_index, mailbox_id)
+		local msg = debug.traceback(msg, 3)
+		msg = string.format("ccall_connect_to_ret_handler error : connect_index = %d mailbox_id = %d \n%s", connect_index, mailbox_id, msg)
+		return msg 
+	end
+	
+	local status, msg = xpcall(ServiceClient.connect_to_ret
+	, function(msg) return error_handler(msg, connect_index, mailbox_id) end
+	, connect_index, mailbox_id)
+
+	if not status then
+		Log.err(msg)
+	end
+end
+
+function ccall_connect_to_success_handler(mailbox_id)
+	mailbox_id = math.floor(mailbox_id)
+	Log.info("ccall_connect_to_success_handler mailbox_id=%d", mailbox_id)
+
+	local function error_handler(msg, mailbox_id)
+		local msg = debug.traceback(msg, 3)
+		msg = string.format("ccall_connect_to_success_handler error : mailbox_id = %d \n%s", mailbox_id, msg)
+		return msg 
+	end
+	
+	local status, msg = xpcall(ServiceClient.connect_to_success
+	, function(msg) return error_handler(msg, mailbox_id) end
+	, mailbox_id)
+
+	if not status then
+		Log.err(msg)
+	end
+end
 
 function ccall_recv_msg_handler(mailbox_id, msg_id)
 	mailbox_id = math.floor(mailbox_id)
@@ -289,64 +348,6 @@ function ccall_disconnect_handler(mailbox_id)
 	local status, msg = xpcall(handle_disconnect
 	, function(msg) return error_handler(msg, mailbox_id) end
 	, mailbox_id)
-
-	if not status then
-		Log.err(msg)
-	end
-end
-
-function ccall_connect_to_ret_handler(connect_index, mailbox_id)
-	connect_index = math.floor(connect_index)
-	mailbox_id = math.floor(mailbox_id)
-	Log.info("ccall_connect_to_ret_handler connect_index=%d mailbox_id=%d", connect_index, mailbox_id)
-
-	local function error_handler(msg, connect_index, mailbox_id)
-		local msg = debug.traceback(msg, 3)
-		msg = string.format("ccall_connect_to_ret_handler error : connect_index = %d mailbox_id = %d \n%s", connect_index, mailbox_id, msg)
-		return msg 
-	end
-	
-	local status, msg = xpcall(ServiceClient.connect_to_ret
-	, function(msg) return error_handler(msg, connect_index, mailbox_id) end
-	, connect_index, mailbox_id)
-
-	if not status then
-		Log.err(msg)
-	end
-end
-
-function ccall_connect_to_success_handler(mailbox_id)
-	mailbox_id = math.floor(mailbox_id)
-	Log.info("ccall_connect_to_success_handler mailbox_id=%d", mailbox_id)
-
-	local function error_handler(msg, mailbox_id)
-		local msg = debug.traceback(msg, 3)
-		msg = string.format("ccall_connect_to_success_handler error : mailbox_id = %d \n%s", mailbox_id, msg)
-		return msg 
-	end
-	
-	local status, msg = xpcall(ServiceClient.connect_to_success
-	, function(msg) return error_handler(msg, mailbox_id) end
-	, mailbox_id)
-
-	if not status then
-		Log.err(msg)
-	end
-end
-
-function ccall_new_connection(mailbox_id, conn_type)
-	mailbox_id = math.floor(mailbox_id)
-	Log.info("ccall_new_connection mailbox_id=%d conn_type=%d", mailbox_id, conn_type)
-
-	local function error_handler(msg, mailbox_id)
-		local msg = debug.traceback(msg, 3)
-		msg = string.format("ccall_new_connection error : mailbox_id = %d \n%s", mailbox_id, msg)
-		return msg 
-	end
-	
-	local status, msg = xpcall(Net.add_mailbox
-	, function(msg) return error_handler(msg, mailbox_id) end
-	, mailbox_id, conn_type)
 
 	if not status then
 		Log.err(msg)
