@@ -227,18 +227,6 @@ function g_funcs.handle_register_server_ret(data, mailbox_id, msg_id)
 	end
 end
 
--- a common handle for MID.REGISTER_SERVER_BROADCAST
-function g_funcs.handle_register_server_broadcast(data, mailbox_id, msg_id)
-	Log.debug("handle_register_server_broadcast: data=%s", Util.table_to_string(data))
-	ServiceClient.add_server(mailbox_id, data.server_id, data.server_type, data.single_scene_list, data.from_to_scene_list, true)
-end
-
--- a common handle for MID.SERVER_DISCONNECT
-function g_funcs.handle_server_disconnect(data, mailbox_id, msg_id)
-	Log.debug("handle_server_disconnect: data=%s", Util.table_to_string(data))
-	ServiceClient.remove_server(mailbox_id, data.server_id)
-end
-
 function g_funcs.get_empty_attr_table()
 	return {
 		byte_attr_list = {},
