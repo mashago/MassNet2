@@ -39,11 +39,10 @@ function g_funcs.connect_to_servers(xml_doc)
 		local invite = address_ele:int_attribute("invite")
 		local no_reconnect = address_ele:int_attribute("no_reconnect")
 		Log.info("ip=%s port=%d server_id=%d server_type=%d register=%d invite=%d no_reconnect=%d", ip, port, server_id, server_type, register, invite, no_reconnect)
-		ServiceClient.add_connect_service(ip, port, server_id, server_type, register, invite, no_reconnect)
+		g_service_client.do_connect(ip, port, server_id, server_type, register, invite, no_reconnect)
 
 		address_ele = address_ele:next_sibling_element()
 	end
-	ServiceClient.create_connect_timer()
 
 	return true
 end
@@ -146,7 +145,6 @@ function g_funcs.connect_to_mysql(xml_doc)
 
 		info_ele = info_ele:next_sibling_element()
 	end
-	ServiceClient.create_connect_timer()
 
 	return true
 end
@@ -167,7 +165,7 @@ function g_funcs.handle_register_server(data, mailbox_id, msg_id)
 	}
 
 	-- add server
-	local new_server_info = ServiceServer.add_server(mailbox_id, data.server_id, data.server_type, data.single_scene_list, data.from_to_scene_list)
+	local new_server_info = g_service_server.add_server(mailbox_id, data.server_id, data.server_type, data.single_scene_list, data.from_to_scene_list)
 	if not new_server_info then
 		msg.result = ErrorCode.REGISTER_SERVER_FAIL
 		Net.send_msg(mailbox_id, MID.REGISTER_SERVER_RET, msg)
@@ -175,34 +173,6 @@ function g_funcs.handle_register_server(data, mailbox_id, msg_id)
 	end
 
 	new_server_info:send_msg(MID.REGISTER_SERVER_RET, msg)
-
-	-- broadcast
-	if g_server_conf._no_broadcast then
-		return
-	end
-
-	for server_id, server_info in pairs(ServiceServer._all_server_map) do
-		if server_id ~= data.server_id then
-			local msg = 
-			{
-				server_id = data.server_id,
-				server_type = data.server_type,
-				single_scene_list = data.single_scene_list,
-				from_to_scene_list = data.from_to_scene_list,
-			}
-			server_info:send_msg(MID.REGISTER_SERVER_BROADCAST, msg)
-
-			local msg = 
-			{
-				server_id = server_info._server_id,
-				server_type = server_info._server_type,
-				single_scene_list = server_info._single_scene_list,
-				from_to_scene_list = server_info._from_to_scene_list,
-			}
-			new_server_info:send_msg(MID.REGISTER_SERVER_BROADCAST, msg)
-		end
-	end
-
 end
 
 -- a common handle for MID.REGISTER_SERVER_RET
@@ -214,7 +184,7 @@ function g_funcs.handle_register_server_ret(data, mailbox_id, msg_id)
 	end
 	local server_id = data.server_id
 	local server_type = data.server_type
-	ServiceClient.register_success(mailbox_id, server_id, server_type)
+	g_service_client.register_success(mailbox_id, server_id, server_type)
 
 	if server_type == ServerType.LOGIN and g_server_conf._server_type == ServerType.BRIDGE then
 		-- register area

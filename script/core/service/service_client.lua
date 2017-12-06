@@ -21,7 +21,7 @@ function ServiceClient:ctor()
 end
 
 ServiceClient.is_service_server = nil
-ServiceClient.add_connect_service = nil
+ServiceClient.do_connect = nil
 ServiceClient.create_connect_timer = nil
 ServiceClient.get_service = nil
 ServiceClient.add_server = nil
@@ -48,16 +48,15 @@ function ServiceClient:is_service_server(mailbox_id)
 	return false
 end
 
-function ServiceClient:add_connect_service(ip, port, server_id, server_type, register, invite, no_reconnect)
+function ServiceClient:do_connect(ip, port, server_id, server_type, register, invite, no_reconnect)
 	-- check duplicate connect service
-	
 	register = register or 0
 	invite = invite or 0
 	no_reconnect = no_reconnect or 0
 
 	for _, v in ipairs(self._service_server_info_list) do
 		if v._ip == ip and v.port == port then
-			Log.warn("ServiceClient:add_connect_service duplicate add ip=%s port=%d", ip, port)
+			Log.warn("ServiceClient:do_connect duplicate add ip=%s port=%d", ip, port)
 			return
 		end
 	end
